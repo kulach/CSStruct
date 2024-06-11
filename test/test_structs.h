@@ -1,3 +1,5 @@
+#pragma once
+
 #include <utest/utest.h>
 #include <csstruct.h>
 #include <stdint.h>
@@ -11,7 +13,7 @@ struct IntegerStruct {
     uint32_t u32 = 0;
     int32_t i32 = 0;
     uint64_t u64 = 0;
-    uint64_t i64 = 0;
+    int64_t i64 = 0;
 
     static constexpr auto properties = std::make_tuple(
         property("u8", &IntegerStruct::u8),

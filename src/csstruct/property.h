@@ -1,8 +1,8 @@
 #pragma once
 
 #include <stdint.h>
-#include <tuple>
 #include <utility>
+#include <string_view>
 
 namespace cssv {
 

@@ -2,7 +2,10 @@
 
 #include <stdint.h>
 #include <fstream>
-#include <exception>
+#include <iostream>
+#include <algorithm>
+#include <tuple>
+#include <charconv>
 
 namespace cssv {
 
@@ -31,13 +34,17 @@ class CsvReader {
     }
 
     void get_next_line(Format& format) {
-        if !(has_data() || !fstream.is_open()) {
+        if (!has_data()) {
             std::cerr << "Error reading next line" << std::endl;
             exit(1);
         }
 
         std::getline(fstream, line);
         read_line(format);
+    }
+
+    bool has_data() {
+        return open && fstream.is_open();
     }
 
     void close_file() {
@@ -49,9 +56,23 @@ class CsvReader {
     void read_line(Format& format) {
         std::string_view view(line);
         std::string_view::iterator begin = view.begin();
-        std::apply([&f, &view, &begin], (auto&... args) {
-                ((CsvReader::set_value_line(f.*args, view, begin)), ...);
-                });
+        std::apply([&format, &view, &begin] (auto&... args) {
+            ((CsvReader::read_value(format.*(args.second), view, begin)), ...);
+            }, Format::properties);
+    }
+
+    template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, bool> = true> 
+    static void set_value(T& val, std::string_view::iterator& begin, std::string_view::iterator& end) noexcept {
+        auto [_, ec] = std::from_chars(begin, end, val);
+        if (ec != std::errc()) {
+            exit(1);
+        }
+    }
+
+    template <typename T> 
+    static void read_value(T& val, const std::string_view& line, std::string_view::iterator& begin) {
+        std::string_view::iterator end = std::find(begin, line.end(), ',');
+        CsvReader::set_value(val, begin, end);
     }
 };
 
