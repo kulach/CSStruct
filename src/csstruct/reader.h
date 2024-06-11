@@ -65,6 +65,7 @@ class CsvReader {
     static void set_value(T& val, std::string_view::iterator& begin, std::string_view::iterator& end) noexcept {
         auto [_, ec] = std::from_chars(begin, end, val);
         if (ec != std::errc()) {
+            std::cerr << "Error setting value with given data: " << std::string(begin, end) << std::endl;
             exit(1);
         }
     }
@@ -73,6 +74,9 @@ class CsvReader {
     static void read_value(T& val, const std::string_view& line, std::string_view::iterator& begin) {
         std::string_view::iterator end = std::find(begin, line.end(), ',');
         CsvReader::set_value(val, begin, end);
+        if (end != line.end()) {
+            begin = end + 1;
+        }
     }
 };
 
