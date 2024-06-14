@@ -7,26 +7,35 @@
 #include <string_view>
 #include <tuple>
 #include <charconv>
+#include <array>
 
 namespace cssv {
 
 template <size_t N> 
 struct Separator {
-    const std::string_view& view;
+    size_t next = 0;
     std::array<std::string_view::iterator, N> begins;
     std::array<std::string_view::iterator, N> ends;
 
-    Separator(const std::string_view& view) 
-        : view(view) {
-            partition();
-        }
+    void parse_view(const std::string_view& view) {
+        partition(view);
+        next = 0;
+    }
+
+    std::pair<std::string_view::iterator, std::string_view::iterator> next_range() {
+        size_t curr = next;
+        next++;
+        return {begins[curr], ends[curr]};
+    }
 
     private:
 
-    void partition() {
+    void partition(const std::string_view& view) {
         std::string_view::iterator begin = view.begin();
+        std::string_view::iterator end = view.end();
         for (size_t i = 0; i < N; i++) {
-            fill_next_value(i, begin);
+            std::string_view::iterator last = fill_next_value(i, begin, end);
+            if (last != view.end()) begin = last + 1;
         }
     }
 
@@ -44,29 +53,47 @@ struct Separator {
                 break;
             }
         }
-
         return end_value;
     }
 
-    void fill_next_value(size_t index, std::string_view::iterator begin) {
-        bool double_quote = (*begin == '\"');
-        std::string_view::iterator first = (double_quote) ? begin + 1 : begin;
-        if (double_quote) {
-            while (true) {
-
-            }
-        }
+    void append_bounds(size_t index, std::string_view::iterator first, std::string_view::iterator last) noexcept {
+        begins[index] = first;
+        ends[index] = last;
     }
 
-}
+    std::string_view::iterator fill_next_value(size_t index, std::string_view::iterator begin, std::string_view::iterator end) {
+        bool double_quote = (*begin == '\"');
+        std::string_view::iterator first = (double_quote) ? begin + 1 : begin;
+        std::string_view::iterator last;
+        if (double_quote) {
+            std::string_view::iterator quote = begin;
+            while (true) {
+                quote = std::find(quote, end, '\"');
+                if (quote + 1 == end || *(quote + 1) == ',') {
+                    // End found
+                    last = quote + 1;
+                    break;
+                }
+            }
+        } else {
+            last = std::find(begin, end, ',');
+        }
+        append_bounds(index, first, last);
+        return last;
+    }
+
+};
 
 template<typename Format> 
 class CsvReader {
+    Separator<std::tuple_size_v<decltype(Format::properties)>> separator;
     bool open = false;
     std::ifstream fstream;
     std::string line;
+    
 
     public:
+
     void open_file(const std::string& filename) {
         fstream.open(filename);
         if (!fstream.is_open()) {
@@ -106,9 +133,9 @@ class CsvReader {
     private:
     void read_line(Format& format) {
         std::string_view view(line);
-        std::apply([&format, &view] (auto&... args) {
-                // std::cout << "Reaching here in function" << std::endl;
-            ((CsvReader::read_value(format.*(args.second), view)), ...);
+        separator.parse_view(view);
+        std::apply([this, &format, &view] (auto&... args) {
+            ((this->read_value(format.*(args.second), view)), ...);
             }, Format::properties);
     }
 
@@ -122,10 +149,10 @@ class CsvReader {
     }
 
     template <typename T> 
-    static void read_value(T& val, std::string_view& view) {
-        std::cout << "Reaching here in read" << std::endl;
-        std::string_view::iterator begin = view.begin();
-        std::string_view::iterator end = std::find(begin, view.end(), ',');
+    void read_value(T& val, std::string_view& view) {
+        auto range = separator.next_range();
+        auto begin = range.first;
+        auto end = range.second;
         CsvReader::set_value(val, begin, end);
         if (end != view.end()) {
             begin = end + 1;
